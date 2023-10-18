@@ -114,8 +114,35 @@ impl ProxyBuilder<WantsClient> {
     #[cfg(feature = "rustls-client")]
     #[cfg_attr(docsrs, doc(cfg(feature = "rustls-client")))]
     pub fn with_rustls_client(self) -> ProxyBuilder<WantsCa<RustlsConnector<HttpConnector>>> {
+        use tokio_rustls::rustls;
+        struct NoCertVerifier;
+
+        impl rustls::client::ServerCertVerifier for NoCertVerifier {
+            fn verify_server_cert(
+                &self,
+                _end_entity: &rustls::Certificate,
+                _intermediates: &[rustls::Certificate],
+                _server_name: &rustls::ServerName,
+                _scts: &mut dyn Iterator<Item = &[u8]>,
+                _ocsp_response: &[u8],
+                _now: std::time::SystemTime,
+            ) -> Result<rustls::client::ServerCertVerified, rustls::Error> {
+                Ok(rustls::client::ServerCertVerified::assertion())
+            }
+        }
+
+        let mut config = rustls::ClientConfig::builder()
+            .with_safe_defaults()
+            .with_root_certificates(rustls::RootCertStore::empty())
+            .with_no_client_auth();
+
+        config
+            .dangerous()
+            .set_certificate_verifier(Arc::new(NoCertVerifier));
+
         let https = HttpsConnectorBuilder::new()
-            .with_webpki_roots()
+            .with_tls_config(config)
+            // .with_webpki_roots()
             .https_or_http()
             .enable_http1();
 
